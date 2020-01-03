@@ -1,0 +1,183 @@
+---
+title: "Mercado de Trabalho no Brasil"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    source_code: embed
+---
+
+Este dashboard apresenta algumas informações básicas sobre o mercado de trabalho brasileiro a partir dos dados da PNAD contínua. Os dados estão atualizados para o terceiro trimestre de 2019. 
+
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(D3plusR)
+library(janitor)
+
+# <div>Icons made by <a href="https://www.flaticon.com/authors/freepik" title="Freepik">Freepik</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a></div>
+
+dados_pnad <- read_csv('../data/dados_pnadc_2019_3.csv')
+serie_desemprego <- read_csv('../data/serie_desemprego.csv')
+
+uf_sigla <- tibble(
+  uf = c("Rondônia", "Acre", "Amazonas", "Roraima", "Pará", "Amapá", 
+         "Tocantins", "Maranhão", "Piauí", "Ceará", "Rio Grande do Norte", 
+         "Paraíba", "Pernambuco", "Alagoas", "Sergipe", "Bahia", "Minas Gerais", 
+         "Espírito Santo", "Rio de Janeiro", "São Paulo", "Paraná", 
+         "Santa Catarina", "Rio Grande do Sul", "Mato Grosso do Sul", 
+         "Mato Grosso", "Goiás", "Distrito Federal"),
+  bra_id = c("RO", "AC", "AM", "RR", "PA", "AP", "TO", "MA", "PI", "CE", 
+             "RN", "PB", "PE", "AL", "SE", "BA", "MG", "ES", "RJ", "SP", "PR", 
+             "SC", "RS", "MS", "MT", "GO", "DF")
+)
+
+dicionario <- list(
+  tx_desemprego = "Taxa de Desemprego",
+  pessoas_ocupadas = "Pessoas Ocupadas",
+  pessoas_desocupadas = "Pessoas Desocupadas",
+  date = "Período"
+)
+
+texto_numeros <- c("Mil", "Milhão", "Milhões", "Bilhão", "Bilhões")
+
+genero_attr <- data.frame(
+  v2007 = c("Homem", "Mulher"),
+  cor = c("#2980b9", "#9b59b6"),
+  icon = c("man.png", "woman.png")
+)
+```
+
+
+Column {data-width=400}
+-----------------------------------------------------------------------
+
+### Milhões de Pessoas Ocupadas
+
+```{r}
+totais <- dados_pnad %>% 
+  filter(Ano == 2019, Trimestre == 3) %>% 
+  group_by(VD4002) %>%
+  summarise(n = round(sum(V1028)/1e6, 1)) %>% 
+  na.omit() %>% 
+  spread(key = VD4002, value = n) %>% 
+  clean_names()
+
+totais %>% 
+  pull(pessoas_ocupadas) %>% 
+  valueBox(value = ., icon = 'fa-users')
+```
+
+### Milhões de Pessoas Desocupadas
+
+```{r}
+totais %>% 
+  pull(pessoas_desocupadas) %>% 
+  valueBox(value = ., icon = 'fa-user-times')
+```
+
+
+### Taxa de Desemprego por Unidade da Federação
+
+```{r}
+dados_pnad %>% 
+  group_by(UF, V2007, V2010, VD4002) %>%
+  summarise(n = sum(V1028)) %>%
+  na.omit() %>% 
+  ungroup() %>% 
+  spread(key = VD4002, value = n) %>% 
+  clean_names() %>% 
+  replace_na(list(pessoas_desocupadas = 0)) %>% 
+  group_by(uf) %>% 
+  summarise(
+    pessoas_ocupadas = sum(pessoas_ocupadas),
+    pessoas_desocupadas = sum(pessoas_desocupadas),
+    tx_desemprego = sum(pessoas_desocupadas)/sum(pessoas_desocupadas + pessoas_ocupadas) * 100
+  ) %>% 
+  arrange(-tx_desemprego) %>% 
+  left_join(uf_sigla) %>% 
+  d3plus(data = .,
+         type = "geo_map",
+         locale = "pt_BR",
+         percent_var = "tx_desemprego",
+         id = "bra_id",
+         currency = "US$",
+         number_text = c("Mil", "Milhão", "Milhões", "Bilhão", "Bilhões"),
+         dictionary = dicionario) %>% 
+  d3plusCoords(
+    value = "https://gist.githubusercontent.com/ruliana/1ccaaab05ea113b0dff3b22be3b4d637/raw/196c0332d38cb935cfca227d28f7cecfa70b412e/br-states.json",
+    projection = "equirectangular"
+  ) %>% 
+  d3plusColor(value = "tx_desemprego",
+              heatmap = RColorBrewer::brewer.pal(n = 6, name = "YlOrBr")) %>% 
+  d3plusText("uf") %>% 
+  d3plusTooltip(value = c("pessoas_ocupadas", "pessoas_desocupadas"))
+```
+
+Column
+-----------------------------------------------------------------------
+
+### Evolução da Taxa de Desemprego
+
+```{r}
+serie_desemprego %>% 
+  mutate(
+    date = paste0(ano, "T", trimestre),
+    id = "Brasil"
+  ) %>% 
+  d3plus(
+    data = .,
+    id = "id",
+    type = "line",
+    percent_var = "tx_desemprego",
+    number_text = texto_numeros,
+    dictionary = dicionario
+  ) %>% 
+  d3plusX("date", grid = FALSE) %>% 
+  d3plusY("tx_desemprego") %>% 
+  d3plusOrder("date", sort = "asc") %>% 
+  d3plusTooltip(c("date", "pessoas_ocupadas", "pessoas_desocupadas")) %>% 
+  d3plusAxes(ticks = FALSE, background = list(color = "#FFFFFF", stroke = 0))
+```
+
+### Taxa de Desemprego por Gênero e Cor/Raça
+
+```{r}
+dados_pnad %>% 
+  filter(Ano == 2019, Trimestre == 3) %>% 
+  group_by(V2007, V2010, VD4002) %>%
+  summarise(n = sum(V1028)) %>%
+  na.omit() %>% 
+  ungroup() %>% 
+  spread(key = VD4002, value = n) %>% 
+  clean_names() %>%
+  replace_na(list(pessoas_desocupadas = 0)) %>% 
+  group_by(v2007, v2010) %>% 
+  summarise(
+    pessoas_ocupadas = sum(pessoas_ocupadas),
+    pessoas_desocupadas = sum(pessoas_desocupadas),
+    tx_desemprego = sum(pessoas_desocupadas)/sum(pessoas_desocupadas + pessoas_ocupadas) * 100
+  ) %>% 
+  filter(v2010 != "Ignorado") %>% 
+  d3plus(
+    data = .,
+    type = "bar",
+    id = "v2007",
+    dictionary = dicionario,
+    locale = "pt_BR",
+    percent_var = "tx_desemprego",
+    number_text = texto_numeros,
+    d3plus_number_format = TRUE
+  ) %>% 
+  d3plusX(value = "v2010", label = "Cor/Raça", grid = FALSE) %>% 
+  d3plusY("tx_desemprego", label = "Taxa de Desemprego") %>% 
+  d3plusOrder(value = "v2010", sort = "asc") %>% 
+  d3plusLegend(value = TRUE, data = FALSE, title = "Gênero", align = "end") %>% 
+  d3plusTooltip(value = c("pessoas_ocupadas", "pessoas_desocupadas")) %>% 
+  d3plusAxes(ticks = FALSE, background = list(color = "#FFFFFF", stroke = 0)) %>% 
+  d3plusAttrs(genero_attr) %>% 
+  d3plusColor("cor") %>% 
+  d3plusIcon("icon", style = "knockout")
+```
+
