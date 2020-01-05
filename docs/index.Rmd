@@ -18,8 +18,11 @@ library(janitor)
 
 # <div>Icons made by <a href="https://www.flaticon.com/authors/freepik" title="Freepik">Freepik</a> from <a href="https://www.flaticon.com/" title="Flaticon">www.flaticon.com</a></div>
 
-dados_pnad <- read_csv('../data/dados_pnadc_2019_3.csv')
-serie_desemprego <- read_csv('../data/serie_desemprego.csv')
+dados_pnad <- read_csv('../data/dados_pnadc_2019_3.csv') %>% 
+  clean_names()
+
+serie_desemprego <- read_csv('../data/serie_desemprego.csv') %>% 
+  clean_names()
 
 uf_sigla <- tibble(
   uf = c("Rondônia", "Acre", "Amazonas", "Roraima", "Pará", "Amapá", 
@@ -57,11 +60,10 @@ Column {data-width=400}
 
 ```{r}
 totais <- dados_pnad %>% 
-  filter(Ano == 2019, Trimestre == 3) %>% 
-  group_by(VD4002) %>%
-  summarise(n = round(sum(V1028)/1e6, 1)) %>% 
+  group_by(vd4002) %>%
+  summarise(n = round(sum(v1028)/1e6, 1)) %>% 
   na.omit() %>% 
-  spread(key = VD4002, value = n) %>% 
+  spread(key = vd4002, value = n) %>% 
   clean_names()
 
 totais %>% 
@@ -82,11 +84,11 @@ totais %>%
 
 ```{r}
 dados_pnad %>% 
-  group_by(UF, V2007, V2010, VD4002) %>%
-  summarise(n = sum(V1028)) %>%
+  group_by(uf, v2007, v2010, vd4002) %>%
+  summarise(n = sum(v1028)) %>%
   na.omit() %>% 
   ungroup() %>% 
-  spread(key = VD4002, value = n) %>% 
+  spread(key = vd4002, value = n) %>% 
   clean_names() %>% 
   replace_na(list(pessoas_desocupadas = 0)) %>% 
   group_by(uf) %>% 
@@ -145,12 +147,11 @@ serie_desemprego %>%
 
 ```{r}
 dados_pnad %>% 
-  filter(Ano == 2019, Trimestre == 3) %>% 
-  group_by(V2007, V2010, VD4002) %>%
-  summarise(n = sum(V1028)) %>%
+  group_by(v2007, v2010, vd4002) %>%
+  summarise(n = sum(v1028)) %>%
   na.omit() %>% 
   ungroup() %>% 
-  spread(key = VD4002, value = n) %>% 
+  spread(key = vd4002, value = n) %>% 
   clean_names() %>%
   replace_na(list(pessoas_desocupadas = 0)) %>% 
   group_by(v2007, v2010) %>% 
